@@ -60,7 +60,8 @@ function normalizeData(d) {
       id: String(c.id || uid()),
       name: String(c.name || c.channelId),
       channelId: c.channelId,
-      url: String(c.url || `https://www.youtube.com/channel/${c.channelId}`),
+      // Only trust youtube.com links, since backups may come from someone else.
+      url: /^https:\/\/www\.youtube\.com\/[\w@.\/-]+$/.test(c.url) ? c.url : `https://www.youtube.com/channel/${c.channelId}`,
       // Older data stored a single categoryId; convert it to the list form.
       categoryIds: [...new Set(Array.isArray(c.categoryIds) ? c.categoryIds : [c.categoryId])].filter(id => catIds.has(id)),
     }));
@@ -517,7 +518,7 @@ function exportData() {
     categories: data.categories,
     creators: data.creators,
     seen: data.seen,
-    settings: { customProxy: data.settings.customProxy }, // API key intentionally left out
+    // Settings (API key, proxy) are left out: they belong to this browser, not the creator list.
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
@@ -540,7 +541,8 @@ async function importData(file) {
   }
   const msg = `Import ${parsed.creators.length} creators and ${parsed.categories.length} categories? This replaces your current data.`;
   if (!confirm(msg)) return;
-  parsed.settings.apiKey = data.settings.apiKey; // keep this browser's key
+  // Keep this browser's settings; an imported file must not swap in its own proxy.
+  parsed.settings = data.settings;
   data = parsed;
   cache = { lastRefreshed: 0, feeds: {} };
   view.filter = 'all';
