@@ -78,3 +78,7 @@ You can send a friend your exported JSON file and they can load it with **Manage
 - `index.html`: page structure and dialogs
 - `style.css`: styles, including dark mode
 - `app.js`: all the logic (storage, fetching, rendering)
+
+## License
+
+[MIT](LICENSE)
