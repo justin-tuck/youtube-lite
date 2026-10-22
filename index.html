@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>YouTube Lite</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1 class="brand">YouTube Lite</h1>
+    <span id="status" class="status" aria-live="polite"></span>
+    <div class="actions">
+      <button id="refreshBtn" type="button">Refresh</button>
+      <button id="addBtn" type="button" class="primary">+ Add creator</button>
+      <button id="manageBtn" type="button">Manage</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="sidebar" aria-label="Filters">
+      <h2 class="side-heading">Categories</h2>
+      <ul id="categoryList" class="filter-list"></ul>
+      <h2 class="side-heading">Creators</h2>
+      <ul id="creatorList" class="filter-list"></ul>
+    </nav>
+
+    <main class="content">
+      <div class="toolbar">
+        <h2 id="viewTitle" class="view-title">All</h2>
+        <label class="toggle"><input id="onlyNew" type="checkbox"> Only new</label>
+        <button id="markAllBtn" type="button">Mark all seen</button>
+      </div>
+      <div id="errors" class="errors"></div>
+      <div id="feed" class="grid"></div>
+    </main>
+  </div>
+
+  <!-- Add creator -->
+  <dialog id="addDialog">
+    <form id="addForm">
+      <h2>Add creator</h2>
+      <label>Channel URL, @handle, or channel ID
+        <input name="channel" required autocomplete="off"
+               placeholder="https://www.youtube.com/@handle or UC…">
+      </label>
+      <label>Name <span class="muted">(optional, filled in from the feed)</span>
+        <input name="name" autocomplete="off">
+      </label>
+      <fieldset class="cat-field">
+        <legend>Categories <span class="muted">(pick any)</span></legend>
+        <div id="addCategories" class="cat-checks"></div>
+      </fieldset>
+      <p id="addStatus" class="form-status" aria-live="polite"></p>
+      <p class="hint">
+        @handle links are resolved through the CORS proxy, which can fail.
+        If that happens, paste the channel ID instead. To find it, open the channel on YouTube, then
+        <em>About → Share channel → Copy channel ID</em>. It starts with <code>UC</code>.
+      </p>
+      <div class="dialog-actions">
+        <button type="button" data-close>Cancel</button>
+        <button type="submit" class="primary" id="addSubmit">Add</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Manage creators, categories, settings, backup -->
+  <dialog id="manageDialog" class="wide">
+    <div class="dialog-head">
+      <h2>Manage</h2>
+      <button type="button" data-close aria-label="Close">✕</button>
+    </div>
+
+    <section>
+      <h3>Creators</h3>
+      <div id="creatorTable" class="rows"></div>
+    </section>
+
+    <section>
+      <h3>Categories</h3>
+      <div id="categoryTable" class="rows"></div>
+      <form id="newCategoryForm" class="inline-form">
+        <input name="name" placeholder="New category" required autocomplete="off">
+        <button type="submit">Add category</button>
+      </form>
+    </section>
+
+    <section>
+      <h3>Fetching</h3>
+      <label>YouTube Data API key <span class="muted">(optional)</span>
+        <input id="apiKeyInput" type="password" autocomplete="off" placeholder="Leave empty to use RSS through a CORS proxy">
+      </label>
+      <p class="hint">With a key, videos load directly from Google's API (no proxy, more reliable). Free quota is plenty for personal use. The key stays in this browser and is not included in exports.</p>
+      <label>Custom CORS proxy <span class="muted">(optional, tried first)</span>
+        <input id="proxyInput" autocomplete="off" placeholder="https://my-proxy.example/?url={url}">
+      </label>
+      <p class="hint"><code>{url}</code> is replaced with the encoded feed URL. The proxy must return the raw response body.</p>
+    </section>
+
+    <section>
+      <h3>Backup</h3>
+      <div class="inline-form">
+        <button type="button" id="exportBtn">Export JSON</button>
+        <label class="button-like">Import JSON<input id="importInput" type="file" accept=".json,application/json" hidden></label>
+      </div>
+      <p class="hint">Exports creators, categories, seen state, and proxy setting. Importing replaces your current data.</p>
+    </section>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>

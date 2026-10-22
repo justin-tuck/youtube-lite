@@ -1,0 +1,11 @@
+# Backups exported from the app list who you follow and what you've watched
+*.json
+
+# Never commit keys or local config
+.env
+*.key
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+.vscode/
