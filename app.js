@@ -357,7 +357,17 @@ function filterButton(filter, label, count, extra = '') {
     <span class="label">${esc(label)}</span>${extra}${count ? `<span class="count">${count}</span>` : ''}</button></li>`;
 }
 
+/** Sidebar sections can be collapsed; the choice is saved with the view state. */
+function renderCollapsed() {
+  for (const [key, list] of [['categories', '#categoryList'], ['creators', '#creatorList']]) {
+    const closed = !!view.collapsed?.[key];
+    $(list).hidden = closed;
+    document.querySelector(`[data-collapse="${key}"]`).setAttribute('aria-expanded', String(!closed));
+  }
+}
+
 function renderSidebar() {
+  renderCollapsed();
   const cats = [['all', 'All', data.creators]];
   for (const c of data.categories) cats.push([`cat:${c.id}`, c.name, creatorsInView(`cat:${c.id}`)]);
   if (data.creators.some(c => !c.categoryIds.length)) cats.push(['cat:none', 'Uncategorized', creatorsInView('cat:none')]);
@@ -555,9 +565,13 @@ async function importData(file) {
 /* ================= Events ================= */
 
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-filter],[data-toggle-seen],[data-remove-creator],[data-remove-category],[data-close]');
+  const t = e.target.closest('[data-filter],[data-collapse],[data-toggle-seen],[data-remove-creator],[data-remove-category],[data-close]');
   if (!t) return;
-  if (t.dataset.filter) {
+  if (t.dataset.collapse) {
+    view.collapsed = { ...view.collapsed, [t.dataset.collapse]: !view.collapsed?.[t.dataset.collapse] };
+    save();
+    renderCollapsed();
+  } else if (t.dataset.filter) {
     view.filter = t.dataset.filter;
     if (!view.filter.startsWith('creator:')) view.scope = view.filter;
     save();
