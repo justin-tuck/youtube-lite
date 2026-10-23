@@ -16,7 +16,7 @@ function defaultData() {
     categories: ['AI', 'Coding', 'Fitness', 'Finance'].map(name => ({ id: uid(), name })),
     creators: [],
     seen: {},
-    settings: { apiKey: '', customProxy: '' },
+    settings: { apiKey: '' },
   };
 }
 
@@ -72,107 +72,25 @@ function normalizeData(d) {
   const s = d.settings || {};
   return {
     version: 1, categories, creators, seen,
-    settings: { apiKey: String(s.apiKey || ''), customProxy: String(s.customProxy || '') },
+    settings: { apiKey: String(s.apiKey || '') },
   };
 }
 
 /* ================= Fetching ================= */
 
 /*
- * Pages opened from file:// have origin "null", and YouTube's RSS feeds send no
- * CORS headers, so the browser blocks reading them directly. Without an API key
- * we go through public CORS proxies, trying each until one answers. With an API
- * key we call the YouTube Data API, which allows cross-origin requests.
+ * Everything goes through the YouTube Data API, which allows cross-origin
+ * requests (including from file:// pages). An API key is required.
  */
 const enc = encodeURIComponent;
-const PROXIES = [
-  { name: 'allorigins', url: u => `https://api.allorigins.win/get?url=${enc(u)}`, json: true },
-  { name: 'allorigins-raw', url: u => `https://api.allorigins.win/raw?url=${enc(u)}` },
-  { name: 'everyorigin', url: u => `https://everyorigin.jwvbremen.nl/api/get?url=${enc(u)}`, json: true },
-  { name: 'cors.lol', url: u => `https://api.cors.lol/?url=${enc(u)}` },
-  { name: 'codetabs', url: u => `https://api.codetabs.com/v1/proxy/?quest=${enc(u)}` },
-];
-let preferredProxy = null; // name of the last proxy that worked
-let proxyStrikes = {};     // failures per proxy during the current refresh
 
-/** Error meaning YouTube itself answered with an error (e.g. 404), so other proxies won't help. */
+/** Error meaning YouTube itself answered 404, e.g. a channel without the Shorts-free uploads playlist. */
 class UpstreamError extends Error {}
 
-function proxyList() {
-  const list = [...PROXIES];
-  const custom = data.settings.customProxy.trim();
-  if (custom) {
-    list.unshift({
-      name: 'custom',
-      url: u => (custom.includes('{url}') ? custom.replace('{url}', enc(u)) : custom + enc(u)),
-    });
-  } else if (preferredProxy) {
-    list.sort((a, b) => (b.name === preferredProxy) - (a.name === preferredProxy));
-  }
-  return list;
-}
-
-async function fetchViaProxy(target, timeoutMs = 12000) {
-  const failures = [];
-  const list = proxyList();
-  // Skip proxies that keep failing during this refresh, unless that would skip them all.
-  const usable = list.filter(p => (proxyStrikes[p.name] || 0) < 3);
-  for (const proxy of usable.length ? usable : list) {
-    try {
-      const res = await fetch(proxy.url(target), { signal: AbortSignal.timeout(timeoutMs) });
-      let body, status = res.status;
-      if (proxy.json && res.ok) {
-        const j = await res.json();
-        body = j.contents;
-        status = j.status?.http_code ?? status;
-      } else {
-        body = await res.text();
-      }
-      if (status === 404) throw new UpstreamError('Not found on YouTube (404)');
-      if (status >= 400 || !body) throw new Error(`HTTP ${status}`);
-      preferredProxy = proxy.name;
-      proxyStrikes[proxy.name] = 0;
-      return body;
-    } catch (err) {
-      if (err instanceof UpstreamError) throw err;
-      proxyStrikes[proxy.name] = (proxyStrikes[proxy.name] || 0) + 1;
-      failures.push(`${proxy.name}: ${err.name === 'TimeoutError' ? 'timed out' : err.message}`);
-    }
-  }
-  throw new Error(`All proxies failed (${failures.join('; ')})`);
-}
-
-function parseFeed(xml) {
-  const doc = new DOMParser().parseFromString(xml, 'application/xml');
-  if (doc.querySelector('parsererror') || !doc.querySelector('feed')) throw new Error('Response was not a YouTube feed');
-  const videos = [...doc.getElementsByTagName('entry')].map(e => ({
-    id: e.getElementsByTagName('yt:videoId')[0]?.textContent || '',
-    title: e.querySelector(':scope > title')?.textContent || '(untitled)',
-    published: e.querySelector(':scope > published')?.textContent || '',
-    url: e.querySelector(':scope > link')?.getAttribute('href') || '',
-  })).filter(v => v.id);
-  return {
-    channelName: doc.querySelector('feed > author > name')?.textContent || '',
-    channelId: doc.getElementsByTagName('yt:channelId')[0]?.textContent || '',
-    videos,
-  };
-}
-
-async function fetchFeedRss(channelId) {
-  const base = 'https://www.youtube.com/feeds/videos.xml?';
-  try {
-    // "UULF" + id is the channel's uploads playlist without Shorts and live streams.
-    return parseFeed(await fetchViaProxy(`${base}playlist_id=UULF${channelId.slice(2)}`));
-  } catch (err) {
-    if (!(err instanceof UpstreamError)) throw err;
-    // Some channels lack that playlist; fall back to the full feed and drop Shorts.
-    const feed = parseFeed(await fetchViaProxy(`${base}channel_id=${channelId}`));
-    feed.videos = feed.videos.filter(v => !v.url.includes('/shorts/'));
-    return feed;
-  }
-}
+const NO_KEY_MSG = 'Add a YouTube Data API key under Manage → Fetching.';
 
 async function youtubeApi(path, params) {
+  if (!data.settings.apiKey.trim()) throw new Error(NO_KEY_MSG);
   const qs = new URLSearchParams({ ...params, key: data.settings.apiKey.trim() });
   const res = await fetch(`https://www.googleapis.com/youtube/v3/${path}?${qs}`, { signal: AbortSignal.timeout(15000) });
   const j = await res.json().catch(() => ({}));
@@ -204,12 +122,11 @@ async function fetchFeedApi(channelId) {
   };
 }
 
-const fetchFeed = id => (data.settings.apiKey.trim() ? fetchFeedApi(id) : fetchFeedRss(id));
+const fetchFeed = fetchFeedApi;
 
 /**
- * Turns user input (channel ID, channel URL, @handle, /user/ or /c/ URL) into a
- * channel ID. Handles need a lookup: via the API if a key is set, otherwise by
- * scraping the channel page through a proxy, which is best-effort.
+ * Turns user input (channel ID, channel URL, @handle or /user/ URL) into a
+ * channel ID. Handles and usernames are looked up through the API.
  */
 async function resolveChannelId(input) {
   const s = input.trim();
@@ -219,34 +136,11 @@ async function resolveChannelId(input) {
   const bare = s.match(/^@?([\w.-]{3,})$/)?.[1]; // "@name" or just "name"
   const handle = s.match(/youtube\.com\/(@[^/?#\s]+)/i)?.[1] || (bare && `@${bare}`);
   const user = s.match(/youtube\.com\/user\/([^/?#\s]+)/i)?.[1];
-  const custom = s.match(/youtube\.com\/c\/([^/?#\s]+)/i)?.[1];
-  if (!handle && !user && !custom) throw new Error('That doesn\'t look like a YouTube channel URL, @handle, or channel ID.');
+  if (!handle && !user) throw new Error('That doesn\'t look like a YouTube channel URL, @handle, or channel ID.');
 
-  if (data.settings.apiKey.trim() && (handle || user)) {
-    const j = await youtubeApi('channels', handle ? { part: 'id', forHandle: handle } : { part: 'id', forUsername: user });
-    if (j.items?.[0]?.id) return j.items[0].id;
-    throw new Error('No channel found for that handle.');
-  }
-
-  if (user) {
-    // Legacy usernames still have an RSS feed that includes the channel ID.
-    try {
-      const feed = parseFeed(await fetchViaProxy(`https://www.youtube.com/feeds/videos.xml?user=${enc(user)}`));
-      if (feed.channelId) return feed.channelId;
-    } catch { /* fall through to page scrape */ }
-  }
-
-  const pageUrl = `https://www.youtube.com/${handle ? `@${enc(handle.slice(1))}` : user ? `user/${enc(user)}` : `c/${enc(custom)}`}`;
-  let html;
-  try {
-    html = await fetchViaProxy(pageUrl, 30000);
-  } catch (err) {
-    throw new Error(`Couldn't look up that channel (${err.message}). Paste the channel ID instead.`);
-  }
-  const id = html.match(/<link rel="canonical" href="https:\/\/www\.youtube\.com\/channel\/(UC[\w-]{22})"/)?.[1]
-    || html.match(/"externalId":"(UC[\w-]{22})"/)?.[1];
-  if (!id) throw new Error('Couldn\'t find the channel ID on that page (the proxy may have gotten a consent or error page). Paste the channel ID instead.');
-  return id;
+  const j = await youtubeApi('channels', handle ? { part: 'id', forHandle: handle } : { part: 'id', forUsername: user });
+  if (j.items?.[0]?.id) return j.items[0].id;
+  throw new Error('No channel found for that handle.');
 }
 
 /** Fetches one creator's feed and stores the result (or the error) in the cache. */
@@ -268,12 +162,10 @@ async function refreshCreator(creator) {
 async function refreshAll() {
   if (refreshing || !data.creators.length) return;
   refreshing = true;
-  proxyStrikes = {};
   $('#refreshBtn').disabled = true;
   const queue = [...data.creators];
   let done = 0;
   setStatus(`Refreshing 0/${queue.length}…`);
-  // A few requests at a time to stay polite to the free proxies.
   const worker = async () => {
     while (queue.length) {
       await refreshCreator(queue.shift());
@@ -456,7 +348,6 @@ function renderManage() {
   }).join('');
 
   $('#apiKeyInput').value = data.settings.apiKey;
-  $('#proxyInput').value = data.settings.customProxy;
 }
 
 function render() {
@@ -485,7 +376,6 @@ async function addCreator(form) {
   const input = form.channel.value;
   status.className = 'form-status';
   submit.disabled = true;
-  proxyStrikes = {};
   try {
     status.textContent = 'Looking up channel…';
     const channelId = await resolveChannelId(input);
@@ -528,7 +418,7 @@ function exportData() {
     categories: data.categories,
     creators: data.creators,
     seen: data.seen,
-    // Settings (API key, proxy) are left out: they belong to this browser, not the creator list.
+    // Settings (API key) are left out: they belong to this browser, not the creator list.
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
@@ -551,7 +441,7 @@ async function importData(file) {
   }
   const msg = `Import ${parsed.creators.length} creators and ${parsed.categories.length} categories? This replaces your current data.`;
   if (!confirm(msg)) return;
-  // Keep this browser's settings; an imported file must not swap in its own proxy.
+  // Keep this browser's settings; an imported file must not swap in its own API key.
   parsed.settings = data.settings;
   data = parsed;
   cache = { lastRefreshed: 0, feeds: {} };
@@ -659,7 +549,6 @@ $('#newCategoryForm').addEventListener('submit', e => {
 });
 
 $('#apiKeyInput').addEventListener('change', e => { data.settings.apiKey = e.target.value.trim(); save(); });
-$('#proxyInput').addEventListener('change', e => { data.settings.customProxy = e.target.value.trim(); save(); });
 $('#exportBtn').addEventListener('click', exportData);
 $('#importInput').addEventListener('change', e => {
   const file = e.target.files[0];

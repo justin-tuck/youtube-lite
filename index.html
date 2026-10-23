@@ -54,8 +54,7 @@
       </fieldset>
       <p id="addStatus" class="form-status" aria-live="polite"></p>
       <p class="hint">
-        @handle links are resolved through the CORS proxy, which can fail.
-        If that happens, paste the channel ID instead. To find it, open the channel on YouTube, then
+        @handles are looked up through the YouTube API. You can also paste the channel ID. To find it, open the channel on YouTube, then
         <em>About → Share channel → Copy channel ID</em>. It starts with <code>UC</code>.
       </p>
       <div class="dialog-actions">
@@ -88,14 +87,10 @@
 
     <section>
       <h3>Fetching</h3>
-      <label>YouTube Data API key <span class="muted">(optional)</span>
-        <input id="apiKeyInput" type="password" autocomplete="off" placeholder="Leave empty to use RSS through a CORS proxy">
+      <label>YouTube Data API key <span class="muted">(required)</span>
+        <input id="apiKeyInput" type="password" autocomplete="off" placeholder="Paste your API key">
       </label>
-      <p class="hint">With a key, videos load directly from Google's API (no proxy, more reliable). Free quota is plenty for personal use. The key stays in this browser and is not included in exports.</p>
-      <label>Custom CORS proxy <span class="muted">(optional, tried first)</span>
-        <input id="proxyInput" autocomplete="off" placeholder="https://my-proxy.example/?url={url}">
-      </label>
-      <p class="hint"><code>{url}</code> is replaced with the encoded feed URL. The proxy must return the raw response body.</p>
+      <p class="hint">Videos load directly from Google's API. Free quota is plenty for personal use. The key stays in this browser and is not included in exports.</p>
     </section>
 
     <section>
@@ -104,7 +99,7 @@
         <button type="button" id="exportBtn">Export JSON</button>
         <label class="button-like">Import JSON<input id="importInput" type="file" accept=".json,application/json" hidden></label>
       </div>
-      <p class="hint">Exports creators, categories, and seen state. Your API key and proxy setting stay in this browser. Importing replaces your current creators and categories.</p>
+      <p class="hint">Exports creators, categories, and seen state. Your API key stays in this browser. Importing replaces your current creators and categories.</p>
     </section>
   </dialog>
 
