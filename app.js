@@ -241,7 +241,7 @@ function setStatus(text) {
 function renderStatus() {
   if (refreshing) return;
   const t = cache.lastRefreshed;
-  setStatus(t ? `Last refreshed ${timeAgo(new Date(t).toISOString())} (${new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})` : 'Not refreshed yet');
+  setStatus(t ? `Last refreshed ${timeAgo(new Date(t).toISOString())} (${new Date(t).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}, ${new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})` : 'Not refreshed yet');
 }
 
 function filterButton(filter, label, count, extra = '') {
