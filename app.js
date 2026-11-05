@@ -266,7 +266,7 @@ function renderCollapsed() {
 function renderSidebar() {
   renderCollapsed();
   const cats = [['all', 'All', data.creators]];
-  for (const c of data.categories) cats.push([`cat:${c.id}`, c.name, creatorsInView(`cat:${c.id}`)]);
+  for (const c of [...data.categories].sort((a, b) => a.name.localeCompare(b.name))) cats.push([`cat:${c.id}`, c.name, creatorsInView(`cat:${c.id}`)]);
   if (data.creators.some(c => !c.categoryIds.length)) cats.push(['cat:none', 'Uncategorized', creatorsInView('cat:none')]);
   $('#categoryList').innerHTML = cats.map(([f, label, cs]) => filterButton(f, label, newCount(cs))).join('');
 
