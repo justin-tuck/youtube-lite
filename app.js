@@ -175,11 +175,16 @@ async function refreshAll() {
     }
   };
   await Promise.all(Array.from({ length: 4 }, worker));
-  cache.lastRefreshed = Date.now();
+  // Only count this as a refresh if every creator loaded; otherwise a failed
+  // auto-refresh (e.g. network not up yet after waking) would claim "just refreshed"
+  // and suppress the next stale check.
+  const failed = data.creators.filter(c => cache.feeds[c.id]?.error).length;
+  if (!failed) cache.lastRefreshed = Date.now();
   refreshing = false;
   $('#refreshBtn').disabled = false;
   save();
   render();
+  if (failed) setStatus(`${failed} of ${data.creators.length} creators failed to refresh. Press Refresh to retry.`);
 }
 
 /* ================= Derived data ================= */
