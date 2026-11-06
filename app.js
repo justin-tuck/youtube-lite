@@ -92,7 +92,14 @@ const NO_KEY_MSG = 'Add a YouTube Data API key under Manage → Fetching.';
 async function youtubeApi(path, params) {
   if (!data.settings.apiKey.trim()) throw new Error(NO_KEY_MSG);
   const qs = new URLSearchParams({ ...params, key: data.settings.apiKey.trim() });
-  const res = await fetch(`https://www.googleapis.com/youtube/v3/${path}?${qs}`, { signal: AbortSignal.timeout(15000) });
+  // no-store: when the browser restores a saved tab, requests made while the page is
+  // loading (the auto-refresh) can be answered from the HTTP cache without checking
+  // with YouTube, so the previous session's feeds would come back looking like a
+  // successful refresh.
+  const res = await fetch(`https://www.googleapis.com/youtube/v3/${path}?${qs}`, {
+    cache: 'no-store',
+    signal: AbortSignal.timeout(15000),
+  });
   const j = await res.json().catch(() => ({}));
   if (res.status === 404) throw new UpstreamError(j.error?.message || 'Not found');
   if (!res.ok) throw new Error(`YouTube API: ${j.error?.message || `HTTP ${res.status}`}`);
