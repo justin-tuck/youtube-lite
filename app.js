@@ -117,6 +117,14 @@ async function fetchFeedApi(channelId) {
   }
   const items = (j.items || []).map(i => i.snippet)
     .filter(s => s?.resourceId?.videoId && !/^(Private|Deleted) video$/.test(s.title));
+  // Durations aren't in the playlist response; one extra call covers all (<=15) videos.
+  const durations = {};
+  if (items.length) {
+    try {
+      const d = await youtubeApi('videos', { part: 'contentDetails', id: items.map(s => s.resourceId.videoId).join(','), maxResults: 50 });
+      for (const v of d.items || []) durations[v.id] = v.contentDetails?.duration || '';
+    } catch { /* duration is optional; show the feed without it */ }
+  }
   return {
     channelName: items[0]?.channelTitle || '',
     channelId,
@@ -124,6 +132,7 @@ async function fetchFeedApi(channelId) {
       id: s.resourceId.videoId,
       title: s.title,
       published: s.publishedAt,
+      duration: durations[s.resourceId.videoId] || '',
       url: `https://www.youtube.com/watch?v=${s.resourceId.videoId}`,
     })),
   };
@@ -236,6 +245,16 @@ function esc(s) {
   return String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
 }
 
+/** ISO 8601 duration (e.g. PT1H2M3S) to "1:02:03" / "2:03"; '' if unknown. */
+function formatDuration(iso) {
+  const m = /^P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(iso || '');
+  if (!m) return '';
+  const [d, h, min, s] = m.slice(1).map(n => Number(n || 0));
+  const hours = d * 24 + h;
+  const pad = n => String(n).padStart(2, '0');
+  return hours ? `${hours}:${pad(min)}:${pad(s)}` : `${min}:${pad(s)}`;
+}
+
 function timeAgo(iso) {
   const t = new Date(iso).getTime();
   if (!t) return '';
@@ -327,7 +346,7 @@ function renderFeed() {
       </a>
       <div class="meta">
         ${fresh ? '<span class="badge">NEW</span>' : ''}
-        <span>${esc(v.creator.name)}</span>·<time datetime="${esc(v.published)}" title="${esc(new Date(v.published).toLocaleString())}">${esc(timeAgo(v.published))}</time>
+        <span>${esc(v.creator.name)}</span>·<time datetime="${esc(v.published)}" title="${esc(new Date(v.published).toLocaleString())}">${esc(timeAgo(v.published))}</time>${formatDuration(v.duration) ? `·<span class="duration">${esc(formatDuration(v.duration))}</span>` : ''}
         ${isRecent(v) ? `<button type="button" class="link" data-toggle-seen="${esc(v.id)}">${fresh ? 'Mark seen' : 'Mark unseen'}</button>` : ''}
       </div>
     </article>`;
